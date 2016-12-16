@@ -1,0 +1,93 @@
+#packopt name "png4twi"
+#define SOFT_NAME "png4twi"
+
+#include "a2d.hsp"
+#include "clipboard.hsp"
+
+#uselib "shell32.dll"
+#func DragAcceptFiles "DragAcceptFiles" int,int
+#func DragQueryFile "DragQueryFileA" int,int,int,int
+#func DragFinish "DragFinish" int
+#const WM_DROPFILES 0x0233
+oncmd gosub *OnDropFiles,WM_DROPFILES
+
+path = dir_cur
+
+screen 0, 200, 200
+objsize 180, 20
+pos 10, 10
+button gosub "クリップボードから取得して保存", *getpic_clip
+pos 10, 40
+button gosub "ファイルを読み込んでから保存", *getpic_file
+pos 10, 70
+chkbox "ものぐさな人はチェック", sabori_flg
+pos 10, 100
+mes "※ファイルをここに"
+mes "D&DさせてもOKです"
+DragAcceptFiles hwnd, 1
+stop
+
+*getpic_clip
+	run_type = 0
+	ClipB_GetBmpSize xsize, ysize
+	if(xsize == 0) :dialog "クリップボードに画像がありません.", 1, SOFT_NAME :return
+	buffer 1, xsize, ysize
+	ClipB_GetBmp 0, 0, xsize, ysize
+	if(stat == 0) :dialog "クリップボードの画像を取得できませんでした.", 1, SOFT_NAME :return
+	alCreateImage 0, xsize, ysize
+	alCopyScreenToImage 1, 0, 0, 0, xsize, ysize, 0, 0
+	gosub *edit_and_save
+return
+
+*getpic_file
+	run_type = 1
+	dialog "*", 16
+	if(stat == 0) :return
+	input_path = refstr
+	alCreateImageByFile 0, input_path
+	if(stat == -1) :dialog "画像を読み込めませんでした.", 1, SOFT_NAME :return
+	gosub *edit_and_save
+return
+
+*edit_and_save
+	clr = alGetPixel(0, 0)
+	clr_r = ARGB_R(clr) :clr_g = ARGB_G(clr) :clr_b = ARGB_B(clr) :clr_a = ARGB_A(clr)
+	alSetPixel 0, 0, RGBA(clr_r, clr_g, clr_b, limit(clr_a - 1, 0, 255))
+	if(sabori_flg == 1 || run_type == 2){
+		if(run_type == 0){
+			alSaveFile path + "\\temp.png", "image/png", 0, 0
+			exec "explorer " + path
+		}else{
+			output_path_ = getpath(input_path, 1)
+			repeat -1, 1
+				output_path = output_path_ + "_twi_" + cnt + ".png"
+				exist output_path
+				if(strsize == -1){
+					alSaveFile output_path, "image/png", 0, 0
+					break
+				}
+			loop
+		}
+	}else{
+		dialog "png", 17
+		if(stat == 0) :return
+		output_path = refstr
+		if(getpath(output_path, 2 + 16) != ".png") :output_path += ".png"
+		alSaveFile output_path, "image/png", 0, 0
+	}
+return
+
+*OnDropFiles
+	run_type = 2
+	hDrop = wParam
+	DragQueryFile hDrop, -1, 0, 0
+	nDrop = stat
+	sdim input_path, 260
+	repeat nDrop
+		DragQueryFile hdrop, cnt, varptr(input_path), 260
+		alCreateImageByFile 0, input_path
+		if(stat == -1) :continue
+		gosub *edit_and_save
+	loop
+	DragFinish hDrop
+return
